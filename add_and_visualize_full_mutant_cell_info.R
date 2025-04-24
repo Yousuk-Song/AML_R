@@ -67,8 +67,8 @@ pt01_chr2.25234373.DNMT3A.var_valid$Allele <- "ALT"
 
 
 # (2) chr17.7674918.TP53
-pt01_chr17.7674918.TP53.ref_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr17.7674918.C.TP53.var.bam.cell_barcodes.umi.merged.rds"))
-pt01_chr17.7674918.TP53.var_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr17.7674918.A.TP53.ref.bam.cell_barcodes.umi.merged.rds"))
+pt01_chr17.7674918.TP53.ref_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr17.7674918.A.TP53.ref.bam.cell_barcodes.umi.merged.rds"))
+pt01_chr17.7674918.TP53.var_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr17.7674918.C.TP53.var.bam.cell_barcodes.umi.merged.rds"))
 
 # cell_id를 문자형으로 변환 (ID 매칭 오류 방지)
 pt01_chr17.7674918.TP53.ref_df$cell_id <- as.character(pt01_chr17.7674918.TP53.ref_df$cell_id)
@@ -91,8 +91,8 @@ pt01_chr17.7674918.TP53.ref_valid$Allele <- "REF"
 pt01_chr17.7674918.TP53.var_valid$Allele <- "ALT"
 
 # (3) chr15.90088702.IDH2
-pt01_chr15.90088702.IDH2.ref_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr15.90088702.T.IDH2.var.bam.cell_barcodes.umi.merged.rds"))
-pt01_chr15.90088702.IDH2.var_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr15.90088702.C.IDH2.ref.bam.cell_barcodes.umi.merged.rds"))
+pt01_chr15.90088702.IDH2.ref_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr15.90088702.C.IDH2.ref.bam.cell_barcodes.umi.merged.rds"))
+pt01_chr15.90088702.IDH2.var_df <- readRDS(file.path(rds_dir, "Combined_320-2_Bioproduct.final.sorted.valid_chrom.chr15.90088702.T.IDH2.var.bam.cell_barcodes.umi.merged.rds"))
 
 # cell_id를 문자형으로 변환 (ID 매칭 오류 방지)
 pt01_chr15.90088702.IDH2.ref_df$cell_id <- as.character(pt01_chr15.90088702.IDH2.ref_df$cell_id)
@@ -117,8 +117,8 @@ pt01_chr15.90088702.IDH2.var_valid$Allele <- "ALT"
 
 # ---------- pt02 ----------
 # (1) chr15.90088702.IDH2
-pt02_chr15.90088702.IDH2.ref_df <- readRDS(file.path(rds_dir, "Combined_8966_Bioproduct.final.sorted.valid_chrom.chr15.90088702.T.IDH2.var.bam.cell_barcodes.umi.merged.rds"))
-pt02_chr15.90088702.IDH2.var_df <- readRDS(file.path(rds_dir, "Combined_8966_Bioproduct.final.sorted.valid_chrom.chr15.90088702.C.IDH2.ref.bam.cell_barcodes.umi.merged.rds"))
+pt02_chr15.90088702.IDH2.ref_df <- readRDS(file.path(rds_dir, "Combined_8966_Bioproduct.final.sorted.valid_chrom.chr15.90088702.C.IDH2.ref.bam.cell_barcodes.umi.merged.rds"))
+pt02_chr15.90088702.IDH2.var_df <- readRDS(file.path(rds_dir, "Combined_8966_Bioproduct.final.sorted.valid_chrom.chr15.90088702.T.IDH2.var.bam.cell_barcodes.umi.merged.rds"))
 
 # cell_id를 문자형으로 변환 (ID 매칭 오류 방지)
 pt02_chr15.90088702.IDH2.ref_df$cell_id <- as.character(pt02_chr15.90088702.IDH2.ref_df$cell_id)
@@ -306,8 +306,8 @@ head(mut_info@meta.data)
 
 table(mut_info@meta.data$Mut_info)
 # 13. 결과 저장
-saveRDS(mut_info, file = "/data/processed_data/scRSEQ_AML/marker_macrogen/aml.test.bd.mut3_full_mut_meta_added.Rds")
-system(paste0("chmod 777 ", "/data/processed_data/scRSEQ_AML/marker_macrogen/aml.test.bd.mut3_full_mut_meta_added.Rds"))
+saveRDS(mut_info, file = "/mnt/S1/sdata/processed_data/scRSEQ_AML/marker_macrogen/Adjusted_bam_dir/mutation_cellbarcode/Adjusted_bam_diraml.test.bd.mut3_full_mut_meta_added.Rds")
+system(paste0("chmod 777 ", "/mnt/S1/sdata/processed_data/scRSEQ_AML/marker_macrogen/Adjusted_bam_dir/mutation_cellbarcode/Adjusted_bam_diraml.test.bd.mut3_full_mut_meta_added.Rds"))
 
 
 mut_to_pt <- list(
@@ -486,3 +486,8 @@ all_celltype_vaf_table <- lapply(names(mut_to_pt), function(mut) {
 }) %>% bind_rows()
 
 all_celltype_vaf_table
+
+
+
+
+
