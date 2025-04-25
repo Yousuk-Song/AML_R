@@ -281,20 +281,24 @@ mutation_annot_clean <- mutation_annot_df %>%
 # 9. Hetero 셀 따로 정리 (Mut_info는 대표값 하나만 사용)
 mutation_hetero_df <- mutation_annot_df %>%
   filter(full_cell_id %in% hetero_cells) %>%
+  distinct(full_cell_id, Mut_info) %>%
+  mutate(Allele = "Hetero")
+
+# 10. REF/ALT + Hetero 병합
+mutation_for_merge_collapsed <- mutation_for_merge %>%
+  arrange(full_cell_id, Mut_info) %>%  # 순서를 고정해주는 것이 핵심
   group_by(full_cell_id) %>%
   summarise(
-    Mut_info = Mut_info[1],
-    Allele = "Hetero",
+    Mut_info = paste(Mut_info, collapse = "&"),
+    Allele   = paste(Allele, collapse = "&"),
     .groups = "drop"
   )
 
-# 10. REF/ALT + Hetero 병합
-mutation_for_merge <- bind_rows(mutation_annot_clean, mutation_hetero_df)
-
 # 11. meta_df에 변이 주석 붙이기
 meta_df$cell_id <- rownames(meta_df)
+# 2. meta_df에 병합
 meta_df_annotated <- meta_df %>%
-  left_join(mutation_for_merge, by = c("cell_id" = "full_cell_id"))
+  left_join(mutation_for_merge_collapsed, by = c("cell_id" = "full_cell_id"))
 
 # 12. Seurat 객체에 Mut_info + Allele 추가
 mutation_metadata <- meta_df_annotated %>%
