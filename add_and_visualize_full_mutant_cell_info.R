@@ -50,11 +50,11 @@ pt01_chr2.25234373.DNMT3A.ref_df$cell_id <- as.character(pt01_chr2.25234373.DNMT
 pt01_chr2.25234373.DNMT3A.var_df$cell_id <- as.character(pt01_chr2.25234373.DNMT3A.var_df$cell_id)
 
 # 유효 cell_id만 필터링 후 full ID 매핑
-pt01_chr2.25234373.DNMT3A.ref_valid <- pt01_ref_df %>%
+pt01_chr2.25234373.DNMT3A.ref_valid <- pt01_chr2.25234373.DNMT3A.ref_df %>%
   filter(cell_id %in% pt01_id_map$numeric_id) %>%
   left_join(pt01_id_map, by = c("cell_id" = "numeric_id")) %>%
   rename(numeric_cell_id = cell_id, full_cell_id = cell_id.y)
-pt01_chr2.25234373.DNMT3A.var_valid <- pt01_var_df %>%
+pt01_chr2.25234373.DNMT3A.var_valid <- pt01_chr2.25234373.DNMT3A.var_df %>%
   filter(cell_id %in% pt01_id_map$numeric_id) %>%
   left_join(pt01_id_map, by = c("cell_id" = "numeric_id")) %>%
   rename(numeric_cell_id = cell_id, full_cell_id = cell_id.y)
@@ -79,7 +79,7 @@ pt01_chr17.7674918.TP53.ref_valid <- pt01_chr17.7674918.TP53.ref_df %>%
   filter(cell_id %in% pt01_id_map$numeric_id) %>%
   left_join(pt01_id_map, by = c("cell_id" = "numeric_id")) %>%
   rename(numeric_cell_id = cell_id, full_cell_id = cell_id.y)
-pt01_chr17.7674918.TP53.var_valid <- pt01_var_df %>%
+pt01_chr17.7674918.TP53.var_valid <- pt01_chr17.7674918.TP53.var_df %>%
   filter(cell_id %in% pt01_id_map$numeric_id) %>%
   left_join(pt01_id_map, by = c("cell_id" = "numeric_id")) %>%
   rename(numeric_cell_id = cell_id, full_cell_id = cell_id.y)
@@ -304,11 +304,12 @@ mutation_metadata <- meta_df_annotated %>%
 mut_info <- AddMetaData(mut_info, metadata = mutation_metadata)
 head(mut_info@meta.data)
 
-table(mut_info@meta.data$Mut_info)
+data.frame(table(mut_info@meta.data$Mut_info))
 # 13. 결과 저장
-saveRDS(mut_info, file = "/mnt/S1/sdata/processed_data/scRSEQ_AML/marker_macrogen/Adjusted_bam_dir/mutation_cellbarcode/Adjusted_bam_diraml.test.bd.mut3_full_mut_meta_added.Rds")
-system(paste0("chmod 777 ", "/mnt/S1/sdata/processed_data/scRSEQ_AML/marker_macrogen/Adjusted_bam_dir/mutation_cellbarcode/Adjusted_bam_diraml.test.bd.mut3_full_mut_meta_added.Rds"))
+saveRDS(mut_info, file = "/mnt/S1/sdata/processed_data/scRSEQ_AML/marker_macrogen/Adjusted_bam_dir/mutation_cellbarcode/aml.test.bd.mut3_full_mut_meta_added.Rds")
+system(paste0("chmod 777 ", "/mnt/S1/sdata/processed_data/scRSEQ_AML/marker_macrogen/Adjusted_bam_dir/mutation_cellbarcode/aml.test.bd.mut3_full_mut_meta_added.Rds"))
 
+mut_info <- readRDS("/mnt/S1/sdata/processed_data/scRSEQ_AML/marker_macrogen/Adjusted_bam_dir/mutation_cellbarcode/aml.test.bd.mut3_full_mut_meta_added.Rds")
 
 mut_to_pt <- list(
   "chr2.25234373.C>T.DNMT3A" = c("pt01"),
@@ -320,58 +321,76 @@ mut_to_pt <- list(
   "chr1.114713908.T>C.NRAS" = c("pt07")
 )
 
-library(ggplot2)
-library(dplyr)
-library(tibble)
-library(ggrepel)
-library(glue)
 
-plot_mutation_umap_highlight <- function(seurat_obj, mut_name, mut_to_pt, umap_reduction = "umap.rpca2") {
-  # UMAP 좌표 + 메타데이터 병합
+
+plot_mutation_umap_highlight <- function(seurat_obj, mut_name, mut_to_pt, umap_reduction = "umap.rpca2", k = 10) {
+  library(dplyr)
+  library(tibble)
+  library(ggplot2)
+  library(ggrepel)
+  library(glue)
+  
   umap_df <- as.data.frame(Embeddings(seurat_obj, reduction = umap_reduction)) %>%
-    tibble::rownames_to_column("cell_id") %>%
+    rownames_to_column("cell_id") %>%
     left_join(
       seurat_obj@meta.data %>%
-        tibble::rownames_to_column("cell_id") %>%
-        dplyr::select(cell_id, Mut_info, Allele, Sample_Tag, final.clus),
+        rownames_to_column("cell_id") %>%
+        select(cell_id, Mut_info, Allele, Sample_Tag, final.clus),
       by = "cell_id"
     )
   
-  # 좌표 열 자동 탐지
+  # 좌표 열
   coord_cols <- setdiff(colnames(umap_df), c("cell_id", "Mut_info", "Allele", "Sample_Tag", "final.clus"))
   x_col <- coord_cols[1]
   y_col <- coord_cols[2]
   
-  # 해당 변이에 속한 pt
+  # k-means 클러스터링
+  set.seed(42)
+  umap_df$umap_cluster <- kmeans(umap_df[, coord_cols], centers = k)$cluster %>% as.character()
+  
+  # dominant mapping
+  mapping <- umap_df %>%
+    count(final.clus, umap_cluster) %>%
+    group_by(final.clus) %>%
+    slice_max(n, n = 1, with_ties = FALSE) %>%
+    ungroup()
+  
+  umap_df <- umap_df %>%
+    left_join(mapping, by = "final.clus", suffix = c("", ".map"))
+  
+  # 대상 mutation, 환자 추출
   pts <- mut_to_pt[[mut_name]]
   pt_pattern <- paste0("^(", paste(pts, collapse = "|"), ")_bm0[1-2]$")
   
-  # 배경: UMAP 전체
-  umap_df_gray <- umap_df
+  # 배경 색상 구분
+  umap_df <- umap_df %>%
+    mutate(bg_color = ifelse(final.clus %in% c("CD4_T_cell", "CD8_T_cell"), "highlight", "default"))
   
-  # 강조: 해당 mutation + 해당 pt의 셀만
+  # 강조 셀 필터링: mutation, sample, allele + 클러스터 일치
   umap_df_highlight <- umap_df %>%
-    filter(Mut_info == mut_name & grepl(pt_pattern, Sample_Tag)) %>%
+    filter(Mut_info == mut_name,
+           grepl(pt_pattern, Sample_Tag),
+           Allele %in% c("REF", "Hetero", "ALT"),
+           umap_cluster == umap_cluster.map) %>%
     mutate(Allele = factor(Allele, levels = c("REF", "ALT", "Hetero")))
   
-  # Cell type 라벨 좌표 계산
+  # 라벨 좌표
   cluster_labels <- umap_df %>%
     filter(!is.na(final.clus)) %>%
     group_by(final.clus) %>%
-    summarise(
-      x = median(.data[[x_col]]),
-      y = median(.data[[y_col]]),
-      .groups = "drop"
-    )
+    summarise(x = median(.data[[x_col]]), y = median(.data[[y_col]]), .groups = "drop")
   
-  # Plot
-  ggplot() +
-    geom_point(data = umap_df_gray, aes(x = .data[[x_col]], y = .data[[y_col]]),
-               color = "gray85", size = 0.3, alpha = 0.5) +
+  # plot 생성
+  p <- ggplot() +
+    geom_point(data = umap_df,
+               aes(x = .data[[x_col]], y = .data[[y_col]], color = bg_color),
+               size = 0.3, alpha = 0.4) +
+    scale_color_manual(values = c("default" = "gray85", "highlight" = "lightblue"), guide = "none") +
     geom_point(data = umap_df_highlight,
                aes(x = .data[[x_col]], y = .data[[y_col]], color = Allele),
                size = 1.2, alpha = 0.9) +
-    scale_color_manual(values = c("REF" = "green3", "ALT" = "red", "Hetero" = "orange")) +
+    scale_color_manual(values = c("REF" = "green3", "ALT" = "red", "Hetero" = "orange",
+                                  "default" = "gray85", "highlight" = "lightblue")) +
     geom_text_repel(data = cluster_labels,
                     aes(x = x, y = y, label = final.clus),
                     size = 3.5, fontface = "bold", color = "black",
@@ -381,7 +400,14 @@ plot_mutation_umap_highlight <- function(seurat_obj, mut_name, mut_to_pt, umap_r
       color = "Allele"
     ) +
     theme_minimal()
+  
+  highlighted_cells <- umap_df_highlight %>%
+    select(cell_id, Sample_Tag, final.clus, Allele)
+  
+  return(list(plot = p, highlighted_cells = highlighted_cells))
 }
+
+
 # 시각화
 plot_mutation_umap_highlight(mut_info, "chr15.90088702.T>C.IDH2", mut_to_pt)
 plot_mutation_umap_highlight(mut_info, "chr17.7674918.C>A.TP53", mut_to_pt)
@@ -424,70 +450,61 @@ alt_hetero_tcell_counts_final <- lapply(names(mut_to_pt), function(mut) {
 }) %>%
   bind_rows()
 
-alt_hetero_tcell_counts_final
-
-data.frame(table(mut_info@meta.data$final.clus))
+view(alt_hetero_tcell_counts_final)
 
 
-count_all_cells_with_vaf <- function(seurat_obj, mut_name, mut_to_pt) {
+count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
   pts <- mut_to_pt[[mut_name]]
   pt_pattern <- paste0("^(", paste(pts, collapse = "|"), ")_bm0[1-2]$")
   
+  # 메타데이터 추출 (모든 셀 포함)
   meta <- seurat_obj@meta.data %>%
     tibble::rownames_to_column("cell_id") %>%
-    filter(Mut_info == mut_name,
-           grepl(pt_pattern, Sample_Tag),
-           !is.na(Allele))
+    filter(
+      grepl(mut_name, Mut_info, fixed = TRUE),
+      grepl(pt_pattern, Sample_Tag)
+    )
   
-  # Allele 범주 고정
-  meta$Allele <- factor(meta$Allele, levels = c("REF", "ALT", "Hetero"))
-  
-  # 전체 cell type 목록 고정
+  # 전체 cell type 목록 확보
   all_cell_types <- levels(factor(seurat_obj@meta.data$final.clus))
   
-  # 각 cell type별 ALT+Hetero count
+  # ALT + Hetero 셀 카운트
   alt_het_count <- meta %>%
     filter(Allele %in% c("ALT", "Hetero")) %>%
     count(final.clus) %>%
     complete(final.clus = all_cell_types, fill = list(n = 0)) %>%
     rename(ALT_HET = n)
   
-  # 각 cell type별 ALT+HET+REF 전체 count
+  # 전체 셀 수 (NA 포함)
   total_count <- meta %>%
     count(final.clus) %>%
     complete(final.clus = all_cell_types, fill = list(n = 0)) %>%
     rename(TOTAL = n)
   
-  # 병합 후 VAF 계산
-  merged <- left_join(alt_het_count, total_count, by = "final.clus") %>%
-    mutate(
-      VAF = ifelse(TOTAL > 0, ALT_HET / TOTAL, NA_real_),
-      label = sprintf("%d (%.2f)", ALT_HET, VAF)
-    ) %>%
+  # 병합
+  merged <- full_join(alt_het_count, total_count, by = "final.clus") %>%
+    mutate(label = sprintf("%d / %d", ALT_HET, TOTAL)) %>%
     select(final.clus, label)
   
-  # 전체 ALT+Hetero 셀 수
-  all_alt_het_count <- sum(alt_het_count$ALT_HET)
+  # 전체 수치 계산
+  all_alt_het <- sum(alt_het_count$ALT_HET)
+  all_total <- sum(total_count$TOTAL)
   
-  # Wide format + 추가 열
+  # Wide format
   wide_table <- merged %>%
     pivot_wider(names_from = final.clus, values_from = label) %>%
     mutate(
       Mut_info = mut_name,
-      ALL_ALT_Hetero_cell = all_alt_het_count
+      ALL_ALT_Hetero_cell = all_alt_het,
+      ALL_Total_cell = all_total
     ) %>%
-    select(Mut_info, everything())  # ensure column order
+    select(Mut_info, everything())
   
   return(wide_table)
 }
 
-all_celltype_vaf_table <- lapply(names(mut_to_pt), function(mut) {
-  count_all_cells_with_vaf(mut_info, mut, mut_to_pt)
+all_celltype_counts <- lapply(names(mut_to_pt), function(mut) {
+  count_all_cells_with_alt_het(mut_info, mut, mut_to_pt)
 }) %>% bind_rows()
 
-all_celltype_vaf_table
-
-
-
-
-
+view(all_celltype_counts)
