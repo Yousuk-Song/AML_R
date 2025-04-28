@@ -425,49 +425,52 @@ plot_mutation_umap_highlight(mut_info, "chr1.114713908.T>C.NRAS", mut_to_pt)
 
 count_alt_hetero_tcells_with_total <- function(seurat_obj, mut_name, mut_to_pt) {
   library(dplyr)
+  library(tibble)
   library(stringr)
   library(tidyr)
   
   pts <- mut_to_pt[[mut_name]]
   pt_pattern <- paste0("^(", paste(pts, collapse = "|"), ")_bm0[1-2]$")
   
-  # Mut_info와 Allele 분리
   meta_all <- seurat_obj@meta.data %>%
-    tibble::rownames_to_column("cell_id") %>%
+    rownames_to_column("cell_id") %>%
     mutate(
       Mut_info_list = str_split(Mut_info, "&"),
       Allele_list = str_split(Allele, "&")
     ) %>%
     rowwise() %>%
     mutate(
-      match_idx = list(which(Mut_info_list == mut_name)),
-      matched_allele = if (length(unlist(match_idx)) > 0) Allele_list[[1]][match_idx[[1]]] else NA_character_
+      match_idx = list(which(Mut_info_list == mut_name)),  # mut_name 매칭 인덱스
+      matched_allele = if (length(unlist(match_idx)) > 0) Allele_list[[1]][match_idx[[1]]] else NA_character_  # 매칭된 allele
     ) %>%
     ungroup() %>%
-    filter(!is.na(matched_allele),
-           matched_allele %in% c("ALT", "Hetero"),
-           grepl(pt_pattern, Sample_Tag))
+    filter(
+      !is.na(matched_allele),                          # 매칭된 mutation이 존재
+      matched_allele %in% c("ALT", "Hetero"),           # ALT 또는 Hetero
+      grepl(pt_pattern, Sample_Tag)                    # sample ID 필터링
+    )
   
-  # T-cell만 필터링
   meta_tcells <- meta_all %>%
-    filter(final.clus %in% c("CD4_T_cell", "CD8_T_cell"))
+    filter(final.clus %in% c("CD4_T_cell", "CD8_T_cell"))  # T-cell만 선택
   
-  # T-cell 클러스터 수 세기
+  # 클러스터 레벨 고정
   meta_tcells$final.clus <- factor(meta_tcells$final.clus, levels = c("CD4_T_cell", "CD8_T_cell"))
   
   count_tbl <- meta_tcells %>%
     count(final.clus, .drop = FALSE) %>%
-    tidyr::pivot_wider(names_from = final.clus, values_from = n, values_fill = 0) %>%
-    mutate(Mut_info = mut_name,
-           ALL_ALT_Hetero_cell = nrow(meta_all)) %>%
+    pivot_wider(names_from = final.clus, values_from = n, values_fill = 0) %>%
+    mutate(
+      Mut_info = mut_name,
+      ALL_ALT_Hetero_cell = nrow(meta_all)
+    ) %>%
     select(Mut_info, everything())
   
   return(count_tbl)
 }
 
-
 count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
   library(dplyr)
+  library(tibble)
   library(stringr)
   library(tidyr)
   
@@ -475,7 +478,7 @@ count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
   pt_pattern <- paste0("^(", paste(pts, collapse = "|"), ")_bm0[1-2]$")
   
   meta <- seurat_obj@meta.data %>%
-    tibble::rownames_to_column("cell_id") %>%
+    rownames_to_column("cell_id") %>%
     mutate(
       Mut_info_list = str_split(Mut_info, "&"),
       Allele_list = str_split(Allele, "&")
@@ -486,12 +489,14 @@ count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
       matched_allele = if (length(unlist(match_idx)) > 0) Allele_list[[1]][match_idx[[1]]] else NA_character_
     ) %>%
     ungroup() %>%
-    filter(!is.na(matched_allele),
-           grepl(pt_pattern, Sample_Tag))
+    filter(
+      !is.na(matched_allele),
+      grepl(pt_pattern, Sample_Tag)
+    )
   
   all_cell_types <- levels(factor(seurat_obj@meta.data$final.clus))
   
-  # ALT+Hetero cell count
+  # ALT + Hetero cell count
   alt_het_count <- meta %>%
     filter(matched_allele %in% c("ALT", "Hetero")) %>%
     count(final.clus) %>%
@@ -504,7 +509,6 @@ count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
     complete(final.clus = all_cell_types, fill = list(n = 0)) %>%
     rename(TOTAL = n)
   
-  # Merge and format
   merged <- full_join(alt_het_count, total_count, by = "final.clus") %>%
     mutate(label = sprintf("%d / %d", ALT_HET, TOTAL)) %>%
     select(final.clus, label)
@@ -524,18 +528,19 @@ count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
   return(wide_table)
 }
 
-# T cell ALT/Hetero 카운트
+
+
+# mutation별 T-cell ALT/Hetero 수 계산
 alt_hetero_tcell_counts_final <- lapply(names(mut_to_pt), function(mut) {
   count_alt_hetero_tcells_with_total(mut_info, mut, mut_to_pt)
-}) %>%
-  bind_rows()
+}) %>% bind_rows()
 
 view(alt_hetero_tcell_counts_final)
 
-# 전체 cell type ALT/Hetero 카운트
+# mutation별 전체 cell type ALT/Hetero 수 계산
 all_celltype_counts <- lapply(names(mut_to_pt), function(mut) {
   count_all_cells_with_alt_het(mut_info, mut, mut_to_pt)
-}) %>%
-  bind_rows()
+}) %>% bind_rows()
 
 view(all_celltype_counts)
+
