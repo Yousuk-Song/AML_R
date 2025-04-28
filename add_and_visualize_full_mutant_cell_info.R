@@ -424,19 +424,35 @@ plot_mutation_umap_highlight(mut_info, "chr1.114713908.T>C.NRAS", mut_to_pt)
 
 
 count_alt_hetero_tcells_with_total <- function(seurat_obj, mut_name, mut_to_pt) {
+  library(dplyr)
+  library(stringr)
+  library(tidyr)
+  
   pts <- mut_to_pt[[mut_name]]
   pt_pattern <- paste0("^(", paste(pts, collapse = "|"), ")_bm0[1-2]$")
   
+  # Mut_info와 Allele 분리
   meta_all <- seurat_obj@meta.data %>%
     tibble::rownames_to_column("cell_id") %>%
-    filter(Mut_info == mut_name,
-           Allele %in% c("ALT", "Hetero"),
+    mutate(
+      Mut_info_list = str_split(Mut_info, "&"),
+      Allele_list = str_split(Allele, "&")
+    ) %>%
+    rowwise() %>%
+    mutate(
+      match_idx = list(which(Mut_info_list == mut_name)),
+      matched_allele = if (length(unlist(match_idx)) > 0) Allele_list[[1]][match_idx[[1]]] else NA_character_
+    ) %>%
+    ungroup() %>%
+    filter(!is.na(matched_allele),
+           matched_allele %in% c("ALT", "Hetero"),
            grepl(pt_pattern, Sample_Tag))
   
+  # T-cell만 필터링
   meta_tcells <- meta_all %>%
     filter(final.clus %in% c("CD4_T_cell", "CD8_T_cell"))
   
-  # 클러스터 수 세기 (고정 factor levels 설정)
+  # T-cell 클러스터 수 세기
   meta_tcells$final.clus <- factor(meta_tcells$final.clus, levels = c("CD4_T_cell", "CD8_T_cell"))
   
   count_tbl <- meta_tcells %>%
@@ -449,52 +465,53 @@ count_alt_hetero_tcells_with_total <- function(seurat_obj, mut_name, mut_to_pt) 
   return(count_tbl)
 }
 
-alt_hetero_tcell_counts_final <- lapply(names(mut_to_pt), function(mut) {
-  count_alt_hetero_tcells_with_total(mut_info, mut, mut_to_pt)
-}) %>%
-  bind_rows()
-
-view(alt_hetero_tcell_counts_final)
-
 
 count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
+  library(dplyr)
+  library(stringr)
+  library(tidyr)
+  
   pts <- mut_to_pt[[mut_name]]
   pt_pattern <- paste0("^(", paste(pts, collapse = "|"), ")_bm0[1-2]$")
   
-  # 메타데이터 추출 (모든 셀 포함)
   meta <- seurat_obj@meta.data %>%
     tibble::rownames_to_column("cell_id") %>%
-    filter(
-      grepl(mut_name, Mut_info, fixed = TRUE),
-      grepl(pt_pattern, Sample_Tag)
-    )
+    mutate(
+      Mut_info_list = str_split(Mut_info, "&"),
+      Allele_list = str_split(Allele, "&")
+    ) %>%
+    rowwise() %>%
+    mutate(
+      match_idx = list(which(Mut_info_list == mut_name)),
+      matched_allele = if (length(unlist(match_idx)) > 0) Allele_list[[1]][match_idx[[1]]] else NA_character_
+    ) %>%
+    ungroup() %>%
+    filter(!is.na(matched_allele),
+           grepl(pt_pattern, Sample_Tag))
   
-  # 전체 cell type 목록 확보
   all_cell_types <- levels(factor(seurat_obj@meta.data$final.clus))
   
-  # ALT + Hetero 셀 카운트
+  # ALT+Hetero cell count
   alt_het_count <- meta %>%
-    filter(Allele %in% c("ALT", "Hetero")) %>%
+    filter(matched_allele %in% c("ALT", "Hetero")) %>%
     count(final.clus) %>%
     complete(final.clus = all_cell_types, fill = list(n = 0)) %>%
     rename(ALT_HET = n)
   
-  # 전체 셀 수 (NA 포함)
+  # Total cell count
   total_count <- meta %>%
     count(final.clus) %>%
     complete(final.clus = all_cell_types, fill = list(n = 0)) %>%
     rename(TOTAL = n)
   
-  # 병합
+  # Merge and format
   merged <- full_join(alt_het_count, total_count, by = "final.clus") %>%
     mutate(label = sprintf("%d / %d", ALT_HET, TOTAL)) %>%
     select(final.clus, label)
   
-  # 전체 수치 계산
   all_alt_het <- sum(alt_het_count$ALT_HET)
   all_total <- sum(total_count$TOTAL)
   
-  # Wide format
   wide_table <- merged %>%
     pivot_wider(names_from = final.clus, values_from = label) %>%
     mutate(
@@ -507,8 +524,18 @@ count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
   return(wide_table)
 }
 
+# T cell ALT/Hetero 카운트
+alt_hetero_tcell_counts_final <- lapply(names(mut_to_pt), function(mut) {
+  count_alt_hetero_tcells_with_total(mut_info, mut, mut_to_pt)
+}) %>%
+  bind_rows()
+
+view(alt_hetero_tcell_counts_final)
+
+# 전체 cell type ALT/Hetero 카운트
 all_celltype_counts <- lapply(names(mut_to_pt), function(mut) {
   count_all_cells_with_alt_het(mut_info, mut, mut_to_pt)
-}) %>% bind_rows()
+}) %>%
+  bind_rows()
 
 view(all_celltype_counts)
