@@ -485,25 +485,26 @@ count_all_cells_with_alt_het <- function(seurat_obj, mut_name, mut_to_pt) {
     ) %>%
     rowwise() %>%
     mutate(
+      has_mut = mut_name %in% Mut_info_list,  # Mut_info 안에 mut_name 있는지 확인
       match_idx = list(which(Mut_info_list == mut_name)),
       matched_allele = if (length(unlist(match_idx)) > 0) Allele_list[[1]][match_idx[[1]]] else NA_character_
     ) %>%
     ungroup() %>%
     filter(
-      !is.na(matched_allele),
-      grepl(pt_pattern, Sample_Tag)
+      has_mut,                                # Mut_info에 mutation이 포함되어야 함
+      grepl(pt_pattern, Sample_Tag)            # Sample ID 패턴 일치
     )
   
   all_cell_types <- levels(factor(seurat_obj@meta.data$final.clus))
   
-  # ALT + Hetero cell count
+  # ALT+Hetero cell count
   alt_het_count <- meta %>%
     filter(matched_allele %in% c("ALT", "Hetero")) %>%
     count(final.clus) %>%
     complete(final.clus = all_cell_types, fill = list(n = 0)) %>%
     rename(ALT_HET = n)
   
-  # Total cell count
+  # Total cell count (mutation만 포함된 모든 셀)
   total_count <- meta %>%
     count(final.clus) %>%
     complete(final.clus = all_cell_types, fill = list(n = 0)) %>%
@@ -544,3 +545,6 @@ all_celltype_counts <- lapply(names(mut_to_pt), function(mut) {
 
 view(all_celltype_counts)
 
+
+      
+      
